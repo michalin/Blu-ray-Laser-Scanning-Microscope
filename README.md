@@ -24,7 +24,7 @@ The closeup of an optical pickup unit(OPU) clearly shows the voice coils used fo
 Unlike an optical microscope, where the entirely of an object is imaged at once, a scanning laser microscope takes light intensity measurements in increments, moving across an object in a grid and assembling a magnified image pixel by pixel. 
 A browser-based user interface written in HTML an Java Script allows to operate the device over WLAN.  
 
-<img src="./images/onion480x480.png" width="560">  
+<img src="./images/onion480x480.PNG" width="560">  
 
 *Web interface of Blu-ray microscope, showing onion cells*
 
