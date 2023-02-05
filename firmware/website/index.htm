@@ -1,0 +1,449 @@
+<!--
+Download the required opencv.js from https://docs.opencv.org/4.6.0/opencv.js
+Note: This will not fit on the ESP32 SPIFFS file system, so open from PC.
+-->
+<!DOCTYPE HTML>
+<html>
+
+<head>
+  <title>Blu-Ray Laser Microscope</title>
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <link rel="icon" href="data:,">
+  <style>
+    html {
+      text-align: center;
+    }
+
+    h1 {
+      font-size: 1.8rem;
+      color: white;
+    }
+
+    h2 {
+      font-size: 1.5rem;
+      font-weight: bold;
+    }
+
+    .espcontrol {
+      display: inline-grid;
+      grid-template-columns: 200px auto 200px;
+      background-color: mediumblue;
+      justify-content: center;
+    }
+
+    .header {
+      display: grid;
+      grid-column: -1/1;
+      background-color: darkviolet;
+
+    }
+
+    .left {
+      background-color: #777;
+    }
+
+    .middle {
+      background-color: black;
+    }
+
+    .right {
+      background-color: #777;
+    }
+
+    .footer {
+      display: grid;
+      grid-template-columns: auto auto auto;
+      grid-column: -1/1;
+      gap: 0px;
+      background-color: darkslateblue;
+      color: white;
+      align-items: center;
+    }
+
+    .slider_box {
+      padding: 5px;
+      display: grid;
+      justify-content: left;
+      border: darkslateblue;
+      border-style: dotted;
+      border-width: 1px;
+
+    }
+
+    .slider {
+      width: 180px;
+    }
+
+    .image {
+      background-color: #143642;
+      width: 64px;
+      height: 64px;
+    }
+
+    .meters {
+      grid-column: 3/4;
+    }
+
+    meter {
+      width: 400px
+    }
+
+    .radiogroup {
+      display: grid;
+      grid-template-columns: auto auto;
+      border: darkslateblue;
+      border-style: dotted;
+      border-width: 1px;
+      /*justify-content: space-around;*/
+    }
+
+    .udbutton {
+      background-color: #3e8e41;
+      border-color: white;
+    }
+
+    .udbutton:disabled {
+      opacity: 0.65;
+      cursor: not-allowed;
+    }
+
+    .arrowline {
+      stroke-linecap: round;
+      stroke: yellow;
+      stroke-width: 4;
+      fill: none
+    }
+  </style>
+
+  <script script type="text/javascript">
+    var gateway = "ws://lasermic.local/ws";
+    var alfa = 1; //Contrast
+    var beta = 0; //Brightness
+    var act_channel = 0;
+    var settings = { "nsamples": 0, "pwmbits": 0, "speed": 0, "focus": 0, "laser": 0, "xcoil": 0, "cmd": 0 };
+    var resolution;
+    const IDLE = 0;
+    const SCAN = 1;
+    const STOP = 2;
+    const FOCUS = 3;
+    const GO_UP = 4;
+    const GO_DN = 5;
+    const GO_STOP = 6;
+    const btn_txt_scan = "Scan";
+    const btn_txt_stop = "Stop";
+    const btn_txt_cancelled = "Cancelled";
+    var scanvals;
+    //var scanmat_vector;
+    var cvimage;
+    var linenum = 0; //Number of lines being scanned
+
+    //var gateway = "ws://${window.location.hostname}/ws";
+    var websocket;
+    //var src; //OpenCv Mat
+    window.addEventListener('load', onLoad);
+
+    function show_canvas() {
+      if (resolution < 960)
+        cv.resize(cvimage, cvimage, new cv.Size(480, 480));
+      else
+        cv.resize(cvimage, cvimage, new cv.Size(960, 960));
+      cv.imshow("cvcanvas", cvimage);
+    }
+
+    function onOpenCVReady() {
+      console.log("Open CV ready");
+      resolution = 2 * (1 << settings.pwmbits) - (1 << settings.pwmbits - 3);
+      cvimage = cv.Mat.zeros(resolution, resolution, cv.CV_16UC1);
+      show_canvas();
+
+      scanvals = cv.Mat.zeros(resolution, resolution, cv.CV_16UC1);
+      alfa = Number(document.getElementById("sld_cont").value);
+      document.getElementById("sld_cont").oninput = function () {
+        alfa = Number(this.value);
+        //cv.convertScaleAbs(cvimage, alpha=alpha, beta=beta)
+        scanvals.convertTo(cvimage, cv.CV_16UC1, alfa, beta);
+        show_canvas();
+      }
+      beta = Number(document.getElementById("sld_bright").value);
+      document.getElementById("sld_bright").oninput = function () {
+        beta = Number(this.value);
+        scanvals.convertTo(cvimage, cv.CV_16UC1, alfa, beta);
+        show_canvas();
+      }
+      //console.log(act_channel);
+    }
+
+    function on_updn(value) { //Button that moves the sled up or down
+      settings.cmd = value;
+      websocket.send(JSON.stringify(settings));
+      //console.log(JSON.stringify(settings));
+    }
+
+    function onWsOpen(event) {
+      //console.log('Websocket open');
+      websocket.send(JSON.stringify(settings)); //Send settings to init ESP32
+
+      //Outgoing messages from user interaction
+      document.getElementsByName("rad_samp").forEach(function (radio) {
+        radio.onchange = function () {
+          settings.nsamples = this.value;
+          websocket.send(JSON.stringify(settings));
+          //console.log(JSON.stringify(settings));
+        }
+      });
+
+      document.getElementsByName("rad_res").forEach(function (radio) {
+        radio.onchange = function () {
+          settings.pwmbits = this.value;
+          resolution = 2 * (1 << settings.pwmbits) - (1 << settings.pwmbits - 3);
+          cv.resize(scanvals, scanvals, new cv.Size(resolution, resolution));
+          show_canvas();
+          websocket.send(JSON.stringify(settings));
+          //console.log(JSON.stringify(settings));
+        }
+      });
+
+      document.getElementById("sld_speed").oninput = function () {
+        settings.speed = this.value;
+        websocket.send(JSON.stringify(settings));
+        //console.log(JSON.stringify(settings));
+      }
+
+      document.getElementById("sld_focus").oninput = function () {
+        settings.focus = this.value;
+        websocket.send(JSON.stringify(settings));
+        document.getElementById("sld_focus_fine").value = 0;
+      }
+
+      document.getElementById("sld_focus_fine").oninput = function () {
+        settings.focus = Number(this.value) + Number(document.getElementById("sld_focus").value);
+        websocket.send(JSON.stringify(settings));
+      }
+
+      document.getElementById("sld_laser").oninput = function () {
+        settings.laser = this.max - Number(this.value)
+        websocket.send(JSON.stringify(settings));
+      }
+
+      document.getElementById("sld_xcoil").oninput = function () {
+        settings.xcoil = Number(this.value)
+        websocket.send(JSON.stringify(settings));
+        console.log(JSON.stringify(settings));
+      }
+
+      document.getElementById("btn_scan").onclick = function () { //Scan button clicked
+        if (this.innerHTML == btn_txt_scan) {
+          this.innerHTML = btn_txt_stop;
+          settings.cmd = SCAN;
+          linenum = 0;
+        } else {
+          this.innerHTML = btn_txt_cancelled;
+          settings.cmd = STOP;
+        }
+        websocket.send(JSON.stringify(settings));
+        settings.cmd = IDLE;
+      }
+      document.getElementById("h2_connected").innerHTML = "Connected";
+      document.getElementById("btn_scan").removeAttribute("disabled");
+      document.getElementById("btn_up").removeAttribute("disabled");
+      document.getElementById("btn_dn").removeAttribute("disabled");
+    }
+    function onWsClose(event) {
+      console.log('Websocket closed');
+      document.getElementById("h2_connected").innerHTML = "Not Connected";
+      document.getElementById("btn_scan").setAttribute("disabled", "");
+      document.getElementById("btn_up").setAttribute("disabled", "");
+      document.getElementById("btn_dn").setAttribute("disabled", "");
+      setTimeout(initWebSocket, 2000);
+    }
+    function onMessage(event) { //Event handler for messages from ESP32
+      //console.log(event.data);
+      if (event.data == "stop") {
+        document.getElementById("btn_scan").innerHTML = btn_txt_scan;
+        return;
+      }
+      var arr = event.data.split(",");
+      if (arr.length == 1) {
+        document.getElementById("met_ch1").value = JSON.parse(event.data).SUM;
+        return;
+      }
+
+      if (arr.length != resolution) {
+        console.error("Resolution mismatch. Received array: " + arr.length + " resolution: " + resolution);
+        return;
+      }
+      //console.log(arr.length);
+      var scanline = cv.matFromArray(1, resolution, cv.CV_16UC1, arr);
+      var dstrow = scanvals.row(linenum++);
+      scanline.copyTo(dstrow);
+      scanvals.convertTo(cvimage, cv.CV_16UC1, alfa, beta);
+      show_canvas();
+    }
+    function initWebSocket() {
+      //console.log('Trying to open a WebSocket connection...');
+      websocket = new WebSocket(gateway);
+      websocket.onopen = onWsOpen;
+      websocket.onclose = onWsClose;
+      websocket.onmessage = onMessage; // <-- add this line
+    }
+    //Receiving bulk date
+    function initEventSources() {
+      var evtsource = new EventSource("http://lasermic.local/es");
+      evtsource.onmessage = onMessage;
+    }
+
+    function onLoad(event) { //Initialize html elements when page is loading
+      console.log("onLoad()");
+
+      document.getElementsByName("rad_samp").forEach(function (radio) {
+        if (radio.checked) {
+          settings.nsamples = Number(radio.value);
+        }
+      });
+      document.getElementsByName("rad_res").forEach(function (radio) {
+        if (radio.checked) {
+          settings.pwmbits = Number(radio.value);
+          resolution = 2 * (1 << settings.pwmbits) - (1 << settings.pwmbits - 3);
+        }
+      });
+      settings.speed = Number(document.getElementById("sld_speed").value);
+      settings.focus = Number(document.getElementById("sld_focus").value);
+      settings.focus += Number(document.getElementById("sld_focus_fine").value);
+      settings.laser = Number(document.getElementById("sld_laser").max);
+      settings.laser -= Number(document.getElementById("sld_laser").value);
+      document.getElementById("btn_scan").setAttribute("disabled", "");
+      document.getElementById("btn_scan").innerHTML = btn_txt_scan;
+      document.getElementById("btn_up").setAttribute("disabled", "");
+      document.getElementById("btn_dn").setAttribute("disabled", "");
+      //console.log(settings);
+      initWebSocket();
+      //initEventSources();
+    }
+    var Module = {
+      // https://emscripten.org/docs/api_reference/module.html#Module.onRuntimeInitialized
+      onRuntimeInitialized() {
+        onOpenCVReady();
+      }
+    }
+  </script>
+  <script async src="opencv.js" type="text/javascript"></script>
+  <!--<script async src="opencv_new.js" onload="onOpenCVReady()" type="text/javascript"></script>-->
+
+</head>
+
+<body>
+  <div class="espcontrol">
+    <div class="header">
+      <h1>Blu-Ray Laser Scanning Microscope</h1>
+    </div>
+    <div class="left">
+      <div class="slider_box">
+        <label for="sld_cont">Contrast</label>
+        <input class="slider" type="range" id="sld_cont" min="1" max="4" value="1" step="0.1">
+      </div>
+      <div class="slider_box">
+        <label for="sld_bright">Brightness</label>
+        <input class="slider" type="range" id="sld_bright" min="-65536" max="32768" value="0">
+      </div>
+    </div>
+    <div class="middle">
+      <!--<div class="image">-->
+      <canvas id="cvcanvas" width=480 height=480></canvas>
+      <!--</div>-->
+    </div>
+    <div class="right">
+      <div class="radiogroup">
+        <div style="grid-column: -1/1">Samples Per Dot</div>
+        <p><label for="samp1">1</label>
+          <input type="radio" id="samp1" name="rad_samp" value="1" checked>
+          <label for="samp4">&nbsp 4</label>
+          <input type="radio" id="samp4" name="rad_samp" value="4">
+          <label for="samp8">&nbsp8</label>
+          <input type="radio" id="samp8" name="rad_samp" value="8">
+          <label for="samp12">&nbsp12</label>
+          <input type="radio" id="samp12" name="rad_samp" value="12">
+        </p>
+      </div>
+      <div class="radiogroup">
+        <div style="grid-column: -1/1">Resolution</div>
+        <p><label for="res127">120x120</label>
+          <input type="radio" id="res127" name="rad_res" value="6" checked>
+          <!--The values eqal the PWM resolution in bits-->
+        </p>
+        <p>
+          <label for="res255">240x240</label>
+          <input type="radio" id="res255" name="rad_res" value="7">
+        </p>
+        <p>
+          <label for="res511">480x480</label>
+          <input type="radio" id="res511" name="rad_res" value="8">
+        </p>
+        <p>
+          <label for="res1023">960x960</label>
+          <input type="radio" id="res1023" name="rad_res" value="9">
+        </p>
+      </div>
+
+      <div class="slider_box">
+        <label for="sld_speed">Scan Speed</label>
+        <input class="slider" type="range" id="sld_speed" min="0" max="15">
+      </div>
+      <div class="slider_box">
+        <label for="sld_focus">Focus (coarse)</label>
+        <input class="slider" type="range" id="sld_focus" min="100" max="924">
+      </div>
+      <div class="slider_box">
+        <label for="sld_focus_fine">Focus (fine)</label>
+        <input class="slider" type="range" id="sld_focus_fine" min="-100" max="100">
+      </div>
+      <div class="slider_box">
+        <label for="sld_laser">Laser power</label>
+        <input class="slider" type="range" id="sld_laser" min="128" max="255">
+      </div>
+      <div style="visibility:collapse" class="slider_box">
+        <label  hidden for="sld_xcoil">X-Coil</label>
+        <input  hidden class="slider" type="range" id="sld_xcoil" min="-240" max="239">
+      </div>
+      <hr>
+      <button type="button" id="btn_scan" style="width: 90%;"></button>
+    </div>
+    <div class="footer">
+      <div>
+        <h2 id="h2_connected">Not Connected</h2>
+      </div>
+      <div>
+        <p>
+          <label for="met_ch1">Level</label>
+          <meter id="met_ch1" min="0" max="4096" low="1000"></meter>
+        </p>
+      </div>
+      <div>
+        <button class="udbutton" id="btn_up" onmousedown="on_updn(GO_UP)" onmouseup="on_updn(GO_STOP)" disabled="true">
+          <svg width="40px" height="40px">
+            <line x1="20" y1="5" x2="20" y2="38" class="arrowline"></line>
+            <polyline points="5,20, 20,5, 35,20" class="arrowline"></polyline>
+          </svg>
+        </button>
+        <button class="udbutton" id="btn_dn" onmousedown="on_updn(GO_DN)" onmouseup="on_updn(GO_STOP)">
+          <svg width="40px" height="40px">
+            <line x1="20" y1="5" x2="20" y2="38" class="arrowline"></line>
+            <polyline points="5,20, 20,38, 35,20" class="arrowline"></polyline>
+            <polyline>
+          </svg>
+        </button>
+      </div>
+    </div>
+</body>
+
+</html>
+<!--
+function dbgMat(mat) {
+  console.log('image width: ' + mat.cols + '\n' +
+    'image height: ' + mat.rows + '\n' +
+    'image size: ' + mat.size().width + '*' + mat.size().height + '\n' +
+    'image depth: ' + mat.depth() + '\n' +
+    'image channels ' + mat.channels() + '\n' +
+    'image type: ' + mat.type() + '\n');
+  console.log(mat.data);
+}
+-->
