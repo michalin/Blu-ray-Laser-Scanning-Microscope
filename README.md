@@ -10,7 +10,7 @@ A couple of custom-designed and manufactured plastic parts create a scanning bed
 
 Unlike an optical microscope, where the entirely of an object is imaged at once, a scanning laser microscope takes light intensity measurements in increments, moving across an object in a grid and assembling a magnified image pixel by pixel. 
 A browser-based user interface written in HTML an Java Script allows to operate the device over WLAN.
-<img src="./images/onion480x480.png">*Web interface of Blu-ray microscope, showing onion cells*</img>
+<img src="./images/onion480x480.PNG">*Web interface of Blu-ray microscope, showing onion cells*</img>
 
 ---
 ## Preparing The Microscope
