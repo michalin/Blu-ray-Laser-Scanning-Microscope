@@ -25,7 +25,7 @@
 #define PINSTEPY_STP 23
 #define PINPWM_SCAN_X 25
 #define PINPOL_SCAN_X 26
-#define PINPWN_FOCUS 27
+#define PINPWM_FOCUS 27
 
 #define PIN_SUM 32
 #define PIN_FES 33
@@ -54,12 +54,12 @@ const char *ssid = "WLAN-KEY";
 const char *password = "passphrase";
 // const int ledPin = LED_BUILTIN;
 const int PWMScnFreq = 40000000 >> PWM_SCN_MAX_BITS; // PWM Frequency for X-Scan for max. resolution
-const int PWMChanScn = 0;     // PWM Channel for X-Scan
+//const int PWMChanScn = 0;     // PWM Channel for X-Scan
 const int PWMFocFreq = 40000000 >> PWM_FOC_BITS;
-const int PWMChanFoc = 2; // PWM Channel for focus
+//const int PWMChanFoc = 2; // PWM Channel for focus
 const int PWMLsrFreq = 100000;
-const int PWMChanLsr = 4; // PWM Channel for laser
-const int PWMChanSld = 6; // PWM Channel for manual sled positioning
+//const int PWMChanLsr = 4; // PWM Channel for laser
+//const int PWMChanSld = 6; // PWM Channel for manual sled positioning
 int PWMRes;               // = (1 << PWMResBits) - 1;
 int resolution;           // = 2 * (1 << PWMResBits) - 1;
 // int YRes;
@@ -108,7 +108,7 @@ void setXscan(int x) // Position of lens
   //  int d = (x >= 0) ? PWMRes - x : -x;
   //Serial.printf("x: %d, d: %d\n", x, d);
   //  digitalWrite(PINPOL_SCAN_X, (x >= 0));
-  ledcWrite(PWMChanScn, d);
+  ledcWrite(PINPWM_SCAN_X, d);
 }
 
 void scanX(int speed, CVPoint *linebuf)
@@ -194,7 +194,7 @@ void scan(void *task_break)
   microsteps = 0;
   digitalWrite(PINSTEPY_SLP, ACTIVE);
   digitalWrite(PINPWM_SCAN_X, LOW);
-  ledcWrite(PWMChanScn, 0);
+  ledcWrite(PINPWM_SCAN_X, 0);
   digitalWrite(PINPOL_SCAN_X, LOW);
   web_write("stop");
   vTaskDelete(NULL);
@@ -221,7 +221,7 @@ void handleWebMessage(const char *data, size_t len)
   {
     pwmbits = jdoc["pwmbits"];
     Serial.printf("pwmbits: %d\n", pwmbits);
-    ledcSetup(PWMChanScn, PWMScnFreq, pwmbits);
+    ledcAttach(PINPWM_SCAN_X, PWMScnFreq, pwmbits);
     PWMRes = (1 << pwmbits) - 1;
     resolution = 2 * (1 << pwmbits) - (1 << pwmbits - 3);
     Serial.printf("Resolution: %d\n", resolution);
@@ -231,14 +231,14 @@ void handleWebMessage(const char *data, size_t len)
   {
     focus = jdoc["focus"];
     // Serial.printf("focus: %d\n", focus);
-    ledcWrite(PWMChanFoc, focus);
+    ledcWrite(PINPWM_FOCUS, focus);
   }
   static int laser;
   if (laser != (int)jdoc["laser"])
   {
     laser = jdoc["laser"];
     // Serial.printf("laser: %d\n", laser);
-    ledcWrite(PWMChanLsr, laser);
+    ledcWrite(PINPWM_LSR, laser);
   }
   static int xcoil;
   if (xcoil != (int)jdoc["xcoil"])
@@ -264,12 +264,12 @@ void handleWebMessage(const char *data, size_t len)
     (int)jdoc["cmd"] == GO_UP
         ? digitalWrite(PINSTEPY_DIR, DIRY_UP)
         : digitalWrite(PINSTEPY_DIR, DIRY_DN);
-    ledcAttachPin(PINSTEPY_STP, PWMChanSld);
-    ledcWriteTone(PWMChanSld, 100 * (scan_speed + 1));
+    ledcAttach(PINSTEPY_STP, 0, 1);
+    ledcWriteTone(PINPWM_SCAN_X, 100 * (scan_speed + 1));
     break;
   case CMD::GO_STOP:
     // Serial.println("Stop sled");
-    ledcDetachPin(PINSTEPY_STP);
+    ledcDetach(PINSTEPY_STP);
     digitalWrite(PINSTEPY_SLP, ACTIVE);
     break;
   }
@@ -306,15 +306,15 @@ void setup()
   digitalWrite(PINSTEPY_M2, HIGH);
 
   pinMode(PINPOL_SCAN_X, OUTPUT);
-  adcAttachPin(PIN_SUM);
-  adcAttachPin(PIN_FES);
+  //adcAttachPin(PIN_SUM); No more supported since ESP32 core V 3.0.0, not needed anyway
+  //adcAttachPin(PIN_FES);
 
-  ledcSetup(PWMChanFoc, PWMFocFreq, PWM_FOC_BITS);
-  ledcSetup(PWMChanLsr, PWMLsrFreq, PWM_LSR_BITS);
-  ledcSetup(PWMChanSld, 0, 1);
-  ledcAttachPin(PINPWN_FOCUS, PWMChanFoc);
-  ledcAttachPin(PINPWM_LSR, PWMChanLsr);
-  ledcAttachPin(PINPWM_SCAN_X, PWMChanScn);
+  //ledcSetup(PWMChanFoc, PWMFocFreq, PWM_FOC_BITS); No more supported since ESP32 core V 3.0.0 
+  //ledcSetup(PWMChanLsr, PWMLsrFreq, PWM_LSR_BITS); Do initialization in LEDCAttach
+  //ledcSetup(PWMChanSld, 0, 1);*/
+  ledcAttach(PINPWM_FOCUS, PWMFocFreq, PWM_FOC_BITS);
+  ledcAttach(PINPWM_LSR, PWMLsrFreq, PWM_LSR_BITS);
+  ledcAttach(PINPWM_SCAN_X, 0, 1);
   // handleWebMessage("{\"speed\":2,\"pwmbits\":6,\"yres\":128,\"cmd\":1}", 35);
   web_init(ssid, password);
 }
