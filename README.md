@@ -12,6 +12,10 @@ Unlike an optical microscope, where the entirely of an object is imaged at once,
 A browser-based user interface written in HTML an Java Script allows to operate the device over WLAN.
 <img src="./images/onion480x480.PNG">*Web interface of Blu-ray microscope, showing onion cells*</img>
 
+## Important Note
+**The ESP32 API has changed from versions 2.X (based on ESP-IDF 4.4) to version 3.0 (based on ESP-IDF 5.1) of the Arduino ESP32 core. Use version 2.X or try the migrated branch.
+Find more information here: [Migration from 2.x to 3.0](https://docs.espressif.com/projects/arduino-esp32/en/latest/migration_guides/2.x_to_3.0.html)**
+
 ---
 ## Preparing The Microscope
 - Enter WLAN SSID and passphrase into the source code file `src.ino` and upload to ESP32 module.
